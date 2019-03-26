@@ -2,22 +2,24 @@ import pandas as pd
 import glob
 paths = glob.glob('./training/*')
 
-columns_name = ['FileName', 'TypeSepsis','StartTime','LenTime']
+columns_name = ['FileName', 'TypeSepsis','Sex','Age','StartTime','LenTime']
 list_rows = []
+sex = [0,1]
 type = [0,1]
 
 for path in paths:
     file_name = path.split('/')[-1]
     df = pd.read_csv(path, delimiter='|')
     len_time = df.shape[0]
-
     flag = df[df['SepsisLabel']==1].drop_duplicates(subset=['SepsisLabel'])
+    age = df['Age'].iloc[0]
+    gender = df['Gender'].iloc[0]
     if flag.empty:
-        row =  [file_name, type[0], -1, len_time]
+        row =  [file_name, type[0], gender, age -1, len_time]
         list_rows.append(row)
     else:
         start = flag.index[0]
-        row = [file_name, type[1], start, len_time]
+        row = [file_name, type[1],gender, age, start, len_time]
         list_rows.append(row)
 
 
