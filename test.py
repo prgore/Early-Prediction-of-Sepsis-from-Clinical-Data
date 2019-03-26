@@ -1,14 +1,3 @@
-<<<<<<< HEAD
-import pandas as pd 
-import glob
-
-paths = glob.glob('./training/*')
-
-for path in paths:
-    print(path)
-    data = pd.read_csv(path,delimiter ='|')
-    print(data)
-=======
 import pandas as pd
 import os
 import io
@@ -29,7 +18,7 @@ def get_file_name(sepsis = 0, gender = 0, age = 0):
     if age == 0:
         df = df[df['Age'] <= 50 ]
     else:
-        df = df[df['Age'] >= 50 ]
+        df = df[df['Age'] > 50 ]
     return df
 
 def create_data_frame(df_file_name, interpolation = False):
@@ -49,10 +38,12 @@ def create_data_frame(df_file_name, interpolation = False):
             frames = pd.concat(frames)
     return frames
 
-def process_missing_data(frames):
-    buf  = io.StringIO()
+
+def process_string_info_frame(frames):
+    buf = io.StringIO()
     frames.info(buf = buf)
     s = buf.getvalue()
+    num = int(s.split('\n')[1].split(' ')[1])
     list = s.split('\n')[3:-5]
     label = ['Name', 'None-Null', 'Temp' ,'Type']
     temp =[]
@@ -61,18 +52,54 @@ def process_missing_data(frames):
         array = s.split(' ')
         temp.append(array)
 
-    df = pd.DataFrame(data=temp, columns=label)
-    df = df.drop('Temp', axis=1)
-    # df = df.sort_values(by =['Non'])
-    df['None-Null'] = df['None-Null'].astype(int)
-    df = df.sort_values(by = ['None-Null'], ascending= False)
-    top_items =  df.head(20)
-    print(top_items)
+    temp = pd.DataFrame(data=temp, columns=label)
+    temp = temp.drop('Temp', axis=1)
+    temp['None-Null'] = temp['None-Null'].astype(int)
+    temp = temp.sort_values(by = ['None-Null'], ascending= False)
+
+    return num, temp
 
 
-    linreg = LinearRegression()
-    # print(top_items)
-    data = frames[top_items['Name']]
-    # print(data)
+def process_missing_data(frames):
+    frames = frames
+    while(True):
+        #Processing string
+        num, temp = process_string_info_frame(frames)
+
+        #Use linear
+        items_full = temp[temp['None-Null']==num]['Name'].values.tolist()
+        items_missing = temp[temp['None-Null']< num]['Name']
+        num_items_missing = items_missing.shape[0]
+        if num_items_missing == 0:
+            break
+
+        items_name = items_missing.iloc[0]
+        items_full.append(items_name)
+
+        linreg = LinearRegression()
+        data = frames[items_full]
+            
+        
+        #Step-1: Split the dataset that contains the missing values and no 
+        # missing values are test and train respectively.
+        x_train = data[data[items_name].notnull()].drop(columns= items_name)
+        y_train = data[data[items_name].notnull()][items_name]
+        x_test = data[data[items_name].isnull()].drop(columns=items_name)
+        y_test = data[data[items_name].isnull()][items_name]
+
+        #Step-2: Train the machine learning algorithm
+        linreg.fit(x_train, y_train)
+
+        #Step-3: Predict the missing values in the attribute of the test data.
+        predicted = linreg.predict(x_test)
+
+        #Step-4: Let’s obtain the complete dataset by combining with the target attribute.
+        frames[items_name][frames[items_name].isnull()] = predicted
+        # frames.info()
+        print(frames)
+    # path_save = './xxxxxxxxxxxx.csv'
+    # with open(path_save, 'w') as f:
+    #     frames.to_csv(f, encoding='utf-8', header=True, index = False)
+    # return frames
+
 process_missing_data(create_data_frame(get_file_name()))
->>>>>>> server
