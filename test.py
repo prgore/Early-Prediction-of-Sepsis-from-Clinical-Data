@@ -3,6 +3,7 @@ import os
 import io
 import re
 from sklearn.linear_model import LinearRegression
+import keras
 
 path_check_file = './check.csv'
 path_folder = './training'
@@ -59,6 +60,9 @@ def process_string_info_frame(frames):
 
     return num, temp
 
+def neural_network(x_train, y_train, x_test):
+    return y_test
+
 
 def process_missing_data(frames):
     frames = frames
@@ -85,7 +89,8 @@ def process_missing_data(frames):
         x_train = data[data[items_name].notnull()].drop(columns= items_name)
         y_train = data[data[items_name].notnull()][items_name]
         x_test = data[data[items_name].isnull()].drop(columns=items_name)
-        y_test = data[data[items_name].isnull()][items_name]
+        # y_test = data[data[items_name].isnull()][items_name]
+        # print(y_test)
 
         #Step-2: Train the machine learning algorithm
         linreg.fit(x_train, y_train)
@@ -96,10 +101,21 @@ def process_missing_data(frames):
         #Step-4: Let’s obtain the complete dataset by combining with the target attribute.
         frames[items_name][frames[items_name].isnull()] = predicted
         # frames.info()
-        print(frames)
+    # print(frames)
     # path_save = './xxxxxxxxxxxx.csv'
     # with open(path_save, 'w') as f:
     #     frames.to_csv(f, encoding='utf-8', header=True, index = False)
-    # return frames
+    return frames
+
+def split_to_object(frames):
+    # print(frames)
+    name_files = frames.drop_duplicates(subset=['FileName'], keep='first')['FileName']
+    num_files = name_files.shape[0]
+    for i in range(num_files):
+        name_file = name_files.iloc[i]
+        temp = frames[frames['FileName']==name_file]
+        path_save = './test/'+ name_file
+        with open(path_save, 'w') as f:
+            temp.to_csv(f, encoding='utf-8', header=True, index = False)
 
 process_missing_data(create_data_frame(get_file_name()))
