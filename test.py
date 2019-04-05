@@ -20,7 +20,7 @@ if config_gpu:
 
 #Set GPU
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 path_check_file = './check.csv'
 path_folder = './training'
@@ -29,7 +29,7 @@ path_folder = './training'
 # sepsis with 0 is normal, 1 is sepsis
 # gender= [0,1] with 0 is male, 1 is female
 # thredhold of default age is 50 with True is age > 50 and False is age <=50
-def get_file_name(sepsis=0, gender=0, age=0):
+def get_file_name(sepsis=1, gender=0, age=0):
     df = pd.read_csv(path_check_file)
     df = df[df['TypeSepsis'] == sepsis]
     df = df[df['Sex'] == gender]
@@ -79,16 +79,16 @@ def process_string_info_frame(frames):
     return num, temp
 
 
-def neural_network(x_train_, y_train_, x_test):
+def neural_network(x_train_, y_train_, x_test, epochs):
     num_examples =  x_train_.shape[0]
     x_train = x_train_[:int(num_examples*0.7)]
     y_train = y_train_[:int(num_examples*0.7)]
     x_val = x_train_[int(num_examples*0.7):]
     y_val = y_train_[int(num_examples*0.7):]
 
-    units = 128
-    epochs = 100
-    batch_size = 128
+    units = 512
+    epochs = epochs
+    batch_size = 512
 
     input_model = Input(shape=(x_train.shape[1],))
     # x = Flatten()(input_model)
@@ -143,7 +143,7 @@ def process_missing_data(frames, neural = True):
         # y_test = data[data[items_name].isnull()][items_name]
         # print(y_test)
         if neural:
-            predicted = neural_network(x_train, y_train, x_test)
+            predicted = neural_network(x_train, y_train, x_test, 200)
         else:
             linreg = LinearRegression()
             # Step-2: Train the machine learning algorithm
@@ -170,7 +170,7 @@ def split_to_object(frames):
     for i in range(num_files):
         name_file = name_files.iloc[i]
         temp = frames[frames['FileName'] == name_file]
-        path_save = './test/' + name_file
+        path_save = './test_1_0_0/' + name_file
         with open(path_save, 'w') as f:
             temp.to_csv(f, encoding='utf-8', header=True, index=False)
 

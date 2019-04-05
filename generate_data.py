@@ -2,13 +2,17 @@ import pandas as pd
 import os
 import io
 import re
+
 from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+
 import tensorflow as tf
 from keras.layers import Dense, Activation, Dropout, Input, BatchNormalization, Flatten
 from keras.models import Model, load_model
 from keras.optimizers import Adam
 from keras.callbacks import ReduceLROnPlateau, ModelCheckpoint, TensorBoard, EarlyStopping
 import keras
+import create_folder as cf
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -21,18 +25,26 @@ if config_gpu:
     sess = tf.Session(config=config)
     keras.backend.set_session(sess)
 
-
-
 # Set path
 path_check_file = './check.csv'
+
 path_folder = './training'
-path_folder_gen_model = './generate_model'
+cf.create_folder(path_folder)
+
+folder_model = './generate_model'
+cf.create_folder(folder_model)
 
 
-# Sepsis with 0 is normal, 1 is sepsis
-# Gender= [0,1] with 0 is male, 1 is female
-# Thredhold of default age is 50 with True is age > 50 and False is age <=50
-def get_file_name(sepsis=0, gender=0, age=0):
+'''
+Sepsis with 0 is normal, 1 is sepsis
+Gender= [0,1] with 0 is male, 1 is female
+Thredhold of default age is 50 with True is age > 50 and False is age <=50
+'''
+def divide_data(sepsis=0, gender=0, age=0, interpolation=False):
+    #Name for save model
+    name_folder = str(sepsis)+str(gender)+str(age)
+
+    #Divide data to group
     df = pd.read_csv(path_check_file)
     df = df[df['TypeSepsis'] == sepsis]
     df = df[df['Sex'] == gender]
@@ -40,11 +52,11 @@ def get_file_name(sepsis=0, gender=0, age=0):
         df = df[df['Age'] <= 50]
     else:
         df = df[df['Age'] > 50]
-    return df
 
+    #List file in the group
+    file_names = df['FileName']
 
-def create_data_frame(df_file_name, interpolation=False):
-    file_names = df_file_name['FileName']
+    #Concatenate all file to a frame
     len = file_names.shape[0]
     for i in range(len):
         file = os.path.join(path_folder, file_names.iloc[i])
@@ -58,7 +70,8 @@ def create_data_frame(df_file_name, interpolation=False):
         else:
             frames = [frames, df]
             frames = pd.concat(frames)
-    return frames
+
+    return frames, name_folder
 
 
 def process_string_info_frame(frames):
@@ -82,17 +95,17 @@ def process_string_info_frame(frames):
     return num, temp
 
 
-def neural_network(x_train_, y_train_, epochs, name_feature):
-    num_examples = x_train_.shape[0]
-    x_train = x_train_[:int(num_examples * 0.7)]
-    y_train = y_train_[:int(num_examples * 0.7)]
-    x_val = x_train_[int(num_examples * 0.7):]
-    y_val = y_train_[int(num_examples * 0.7):]
+def neural_network(x, y, name_feature, folder_model_sub):
+    #Create dataset
+    x_train,x_val,y_train,y_val = train_test_split(x, y, test_size= 0.3)
 
+    #Set parameters
     units = 512
-    epochs = epochs
+    epochs = 200
     batch_size = 512
 
+    #Create model
+    shape_input = str(x_train.shape[1])
     input_model = Input(shape=(x_train.shape[1],))
     # x = Flatten()(input_model)
     x = Dense(units)(input_model)
@@ -104,9 +117,10 @@ def neural_network(x_train_, y_train_, epochs, name_feature):
     x = Activation('relu')(x)
     x = Dropout(0.4)(x)
     output_model = Dense(1, activation='linear')(x)
-
     model = Model(inputs=input_model, outputs=output_model)
     model.summary()
+
+    #Compile model
     model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
                   metrics=['accuracy'])
 
@@ -114,22 +128,26 @@ def neural_network(x_train_, y_train_, epochs, name_feature):
     lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=3, verbose=1)
 
     # Check point save all model
-    filepath = path_folder_gen_model + "/" + name_feature + "weights-improvement-{epoch:03d}-{val_acc:.4f}.hdf5"
-    checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+    folder =  folder_model + "/" + folder_model_sub
+    cf.create_folder(folder)
+    name_file = shape_input + "_" + name_feature + ".hdf5"
+    filepath = folder + "/" + name_file
+    checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
-    # # Tensor board
-    # tensor_board = TensorBoard(log_dir=path_folder_gen_model, histogram_freq=0, write_graph=True, write_images=True)
-
+    '''
+    #Tensor board
+    tensor_board = TensorBoard(log_dir=path_folder_gen_model, histogram_freq=0, write_graph=True, write_images=True)
+    '''
     callbacks_list = [lr_reducer, checkpoint]
 
-    # ------Fit network---------
+    # Fit model
     model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, validation_data=(x_val, y_val),
               callbacks=callbacks_list, verbose=2, shuffle=True)
 
     return filepath
 
 
-def process_missing_data(frames, neural=True):
+def process_missing_data(frames, folder_save,neural=True):
     frames = frames
     while (True):
         # Processing string
@@ -155,7 +173,7 @@ def process_missing_data(frames, neural=True):
         # Step-2: Train and prediction the machine learning algorithm
         if neural:
             # Predict with best model
-            filepath = neural_network(x_train,y_train, 200,items_name)
+            filepath = neural_network(x_train, y_train, items_name, folder_save)
             best_model = load_model(filepath)
             predicted = best_model.predict(x_test, batch_size=512)
         else:
@@ -169,24 +187,31 @@ def process_missing_data(frames, neural=True):
     return frames
 
 
-def split_to_object(frames, folder_data = 'data'):
+def split_to_object(frames, folder_data='data'):
     name_files = frames.drop_duplicates(subset=['FileName'], keep='first')['FileName']
     num_files = name_files.shape[0]
     for i in range(num_files):
         name_file = name_files.iloc[i]
         temp = frames[frames['FileName'] == name_file]
-        path_save = './' + folder_data + '/' + name_file
+        folder_save = './' + folder_data
+        cf.create_folder(folder_save)
+        path_save = folder_save+ '/' + name_file
         with open(path_save, 'w') as f:
+            print(path_save)
             temp.to_csv(f, encoding='utf-8', header=True, index=False)
 
 
 def main():
-    sepsis =[0,1]
-    gender = [0,1]
-    age = [0,1]
+    sepsis = [0, 1]
+    gender = [0, 1]
+    age = [0, 1]
     for x in sepsis:
         for y in gender:
             for z in age:
-                split_to_object(process_missing_data(create_data_frame(get_file_name(x,y,z))), 'data')
+                df, name_folder = divide_data(x,y,z)
+                frames = process_missing_data(df, name_folder)
+                split_to_object(frames)
+
+
 
 main()
